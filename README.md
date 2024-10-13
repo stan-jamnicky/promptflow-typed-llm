@@ -6,7 +6,7 @@ This is taking advantage of the Structured JSON feature that is provided by newe
 
 ### How to use
 
-TODO
+Simply install `promptflow-typed-llm` via pip as part of your flow's dependencies by adding it to `requirements.txt`.
 
 ### How to build the package
 
