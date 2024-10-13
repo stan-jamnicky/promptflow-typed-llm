@@ -1,0 +1,39 @@
+typed_llm.tools.typed_llm.typed_llm:
+  name: Typed LLM 
+  type: python
+  inputs:
+    connection:
+      type:
+        - AzureOpenAIConnection
+    deployment_name:
+      type:
+        - string
+    module_path:
+      type:
+        - file_path 
+    response_type:
+      type:
+        - string
+    temperature:
+      type:
+        - double
+      default: 1
+    system_prompt:
+      type:
+        - string
+      default: ""
+    user_prompt:
+      type:
+        - string
+      default: ""
+    assistant_prompt:
+      type:
+        - string
+      default: ""
+    number_of_requests:
+      type:
+        - int
+      default: 1
+  description: Tool for sending typed request to the LLM 
+  module: typed_llm.tools.typed_llm
+  function: typed_llm 
