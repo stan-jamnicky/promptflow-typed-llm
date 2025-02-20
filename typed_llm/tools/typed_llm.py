@@ -118,7 +118,8 @@ def typed_llm(
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            return loop.run_until_complete(do_requests())
+            future = asyncio.run_coroutine_threadsafe(do_requests(), loop)
+            return future.result()
         else:
             return asyncio.run(do_requests())
     except Exception as e:
