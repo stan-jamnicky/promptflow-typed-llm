@@ -60,7 +60,6 @@ def typed_llm(
     user_prompt: Optional[str] = None,
     assistant_prompt: Optional[str] = None,
     number_of_requests: int = 1,
-    timeout: float = 60.0,  # Add a timeout parameter (default to 10 seconds)
     **kwargs) -> list[str]:
 
     if not system_prompt and not user_prompt and not assistant_prompt:
@@ -85,42 +84,13 @@ def typed_llm(
         else:
             client = AsyncAzureOpenAI(azure_ad_token_provider=connection.get_token, azure_endpoint=connection.api_base, api_version=API_VERSION)
 
-        async def request_with_retry():
-            try:
-                return await asyncio.wait_for(
-                    _async_do_openai_request(
-                        client,
-                        semaphore,
-                        deployment_name,
-                        temperature,
-                        messages,
-                        response_format
-                    ),
-                    timeout  # Set the timeout for each task
-                )
-            except asyncio.TimeoutError:
-                # Retry once if the task times out
-                return await asyncio.wait_for(
-                    _async_do_openai_request(
-                        client,
-                        semaphore,
-                        deployment_name,
-                        temperature,
-                        messages,
-                        response_format
-                    ),
-                    timeout  # Set the timeout for the retry
-                )
-
-        tasks = [asyncio.create_task(request_with_retry()) for _ in range(number_of_requests)]
-        return await asyncio.gather(*tasks, return_exceptions=True)
-
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            future = asyncio.run_coroutine_threadsafe(do_requests(), loop)
-            return future.result()
-        else:
-            return asyncio.run(do_requests())
-    except Exception as e:
-        raise RuntimeError(f"Error during OpenAI request: {e}")
+        tasks = [asyncio.create_task(_async_do_openai_request(
+            client,
+            semaphore,
+            deployment_name,
+            temperature,
+            messages,
+            response_format)) for _ in range(number_of_requests)]
+        return await asyncio.gather(*tasks)
+    loop = asyncio.new_event_loop()
+    return loop.run_until_complete(do_requests())
