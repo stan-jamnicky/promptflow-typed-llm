@@ -92,5 +92,12 @@ def typed_llm(
             messages,
             response_format)) for _ in range(number_of_requests)]
         return await asyncio.gather(*tasks)
-    loop = asyncio.new_event_loop()
-    return loop.run_until_complete(do_requests())
+
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            return loop.run_until_complete(do_requests())
+        else:
+            return asyncio.run(do_requests())
+    except Exception as e:
+        raise RuntimeError(f"Error during OpenAI request: {e}")
