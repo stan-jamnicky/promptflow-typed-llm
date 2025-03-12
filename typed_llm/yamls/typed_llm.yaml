@@ -30,6 +30,12 @@ typed_llm.tools.typed_llm.typed_llm:
       type:
         - string
       default: ""
+    user_image_paths:
+      type:
+        - list
+        items:
+          type: string
+      default: []
     number_of_requests:
       type:
         - int
