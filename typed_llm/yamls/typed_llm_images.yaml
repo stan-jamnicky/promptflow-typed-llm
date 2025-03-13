@@ -19,6 +19,16 @@ typed_llm.tools.typed_llm.typed_llm_images:
     deployment_name:
       type:
         - string
+      enabled_by: connection
+      dynamic_list:
+        func_path: promptflow.tools.aoai_gpt4v.list_deployment_names
+        func_kwargs:
+        - name: connection
+          type:
+          - AzureOpenAIConnection
+          reference: ${inputs.connection}
+      allow_manual_entry: true
+      is_multi_select: false
     temperature:
       default: 1
       type:

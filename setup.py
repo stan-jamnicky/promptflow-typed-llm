@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-PACKAGE_NAME = "promptflow_typed_llm"
+PACKAGE_NAME = "promptflow_typed_llm_tools"
 
 setup(
     name=PACKAGE_NAME,
