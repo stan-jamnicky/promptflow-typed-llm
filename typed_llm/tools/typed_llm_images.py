@@ -4,9 +4,10 @@ import sys
 from pathlib import Path
 from promptflow.core import tool
 
-from promptflow.tools.common import handle_openai_error, build_messages, \
+from promptflow.core._prompty_utils import build_messages
+from promptflow.tools.common import handle_openai_error, \
     preprocess_template_string, find_referenced_image_set, convert_to_chat_list, init_azure_openai_client, \
-    post_process_chat_api_response, list_deployment_connections, build_deployment_dict, GPT4V_VERSION \
+    post_process_chat_api_response, list_deployment_connections, build_deployment_dict \
 
 from promptflow._internal import ToolProvider, tool
 from promptflow.connections import AzureOpenAIConnection

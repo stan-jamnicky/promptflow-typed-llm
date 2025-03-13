@@ -17,13 +17,5 @@ def collect_tools_from_directory(base_dir) -> dict:
 
 def list_package_tools():
     """List package tools"""
-    yaml_dir = Path(__file__).parents[1] / "yamls"
+    yaml_dir = Path(__file__).parent / "yamls"
     return collect_tools_from_directory(yaml_dir)
-
-def import_module(module_path: str):
-    module_name = Path(module_path).stem
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
