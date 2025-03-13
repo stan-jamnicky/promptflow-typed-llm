@@ -1,4 +1,7 @@
 from typing import List, Dict
+import importlib.util
+import sys
+from pathlib import Path
 
 from promptflow.tools.common import handle_openai_error, build_messages, \
     preprocess_template_string, find_referenced_image_set, convert_to_chat_list, init_azure_openai_client, \
@@ -7,8 +10,14 @@ from promptflow.tools.common import handle_openai_error, build_messages, \
 from promptflow._internal import ToolProvider, tool
 from promptflow.connections import AzureOpenAIConnection
 from promptflow.contracts.types import PromptTemplate, FilePath
-from typed_llm.tools.utils import import_module
 
+def _import_module(module_path: str):
+    module_name = Path(module_path).stem
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 def list_deployment_names(
     subscription_id=None,
@@ -71,7 +80,7 @@ class AzureOpenAI(ToolProvider):
             "ms-azure-ai-promptflow-called-from": "aoai-gpt4v-tool"
         }
 
-        module = import_module(module_path)
+        module = _import_module(module_path)
         if response_type not in module.__dict__:
             raise ValueError(f"response_type {response_type} not found in {module_path}")
         response_format = module.__dict__[response_type]

@@ -1,7 +1,7 @@
 typed_llm.tools.typed_llm.typed_llm_images:
   name: Typed LLM with vision
   description: Tool for sending typed request to the LLM with Images 
-  type: python
+  type: custom_llm
   module: typed_llm.tools.typed_llm_images
   function: typed_llm_images
   default_prompt: |
