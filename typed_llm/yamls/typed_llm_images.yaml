@@ -1,4 +1,4 @@
-typed_llm.tools.typed_llm_images.AzureOpenAI.chat:
+typed_llm.tools.typed_llm_images.typed_llm_images:
   name: Typed LLM with vision
   description: Tool for sending typed request to the LLM with Images 
   type: python

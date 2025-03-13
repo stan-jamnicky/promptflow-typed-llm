@@ -2,6 +2,7 @@ from typing import List, Dict
 import importlib.util
 import sys
 from pathlib import Path
+from promptflow.core import tool
 
 from promptflow.tools.common import handle_openai_error, build_messages, \
     preprocess_template_string, find_referenced_image_set, convert_to_chat_list, init_azure_openai_client, \
@@ -10,6 +11,8 @@ from promptflow.tools.common import handle_openai_error, build_messages, \
 from promptflow._internal import ToolProvider, tool
 from promptflow.connections import AzureOpenAIConnection
 from promptflow.contracts.types import PromptTemplate, FilePath
+
+API_VERSION = "2024-08-01-preview"
 
 def _import_module(module_path: str):
     module_name = Path(module_path).stem
@@ -33,7 +36,7 @@ def list_deployment_names(
 
     for item in deployment_collection:
         deployment = build_deployment_dict(item)
-        if deployment.version == GPT4V_VERSION:
+        if deployment.version == API_VERSION:
             cur_item = {
                 "value": deployment.name,
                 "display_value": deployment.name,
@@ -42,68 +45,63 @@ def list_deployment_names(
 
     return res
 
+@tool(streaming_option_parameter="stream")
+@handle_openai_error()
+def typed_llm_images(
+    connection: AzureOpenAIConnection,
+    prompt: PromptTemplate,
+    response_type: str,
+    module_path: FilePath,
+    deployment_name: str,
+    temperature: float = 1.0,
+    top_p: float = 1.0,
+    # stream is a hidden to the end user, it is only supposed to be set by the executor.
+    stream: bool = False,
+    stop: list = None,
+    max_tokens: int = None,
+    presence_penalty: float = 0,
+    frequency_penalty: float = 0,
+    seed: int = None,
+    detail: str = 'auto',
+    **kwargs,
+) -> str:
+    client = init_azure_openai_client(connection)
+    prompt = preprocess_template_string(prompt)
+    referenced_images = find_referenced_image_set(kwargs)
 
-class AzureOpenAI(ToolProvider):
-    def __init__(self, connection: AzureOpenAIConnection):
-        super().__init__()
-        self._client = init_azure_openai_client(connection)
+    # convert list type into ChatInputList type
+    converted_kwargs = convert_to_chat_list(kwargs)
+    messages = build_messages(prompt=prompt, images=list(referenced_images), detail=detail, **converted_kwargs)
 
-    @tool(streaming_option_parameter="stream")
-    @handle_openai_error()
-    def chat(
-        self,
-        prompt: PromptTemplate,
-        response_type: str,
-        module_path: FilePath,
-        deployment_name: str,
-        temperature: float = 1.0,
-        top_p: float = 1.0,
-        # stream is a hidden to the end user, it is only supposed to be set by the executor.
-        stream: bool = False,
-        stop: list = None,
-        max_tokens: int = None,
-        presence_penalty: float = 0,
-        frequency_penalty: float = 0,
-        seed: int = None,
-        detail: str = 'auto',
-        **kwargs,
-    ) -> str:
-        prompt = preprocess_template_string(prompt)
-        referenced_images = find_referenced_image_set(kwargs)
+    headers = {
+        "Content-Type": "application/json",
+        "ms-azure-ai-promptflow-called-from": "aoai-gpt4v-tool"
+    }
 
-        # convert list type into ChatInputList type
-        converted_kwargs = convert_to_chat_list(kwargs)
-        messages = build_messages(prompt=prompt, images=list(referenced_images), detail=detail, **converted_kwargs)
+    module = _import_module(module_path)
+    if response_type not in module.__dict__:
+        raise ValueError(f"response_type {response_type} not found in {module_path}")
+    response_format = module.__dict__[response_type]
 
-        headers = {
-            "Content-Type": "application/json",
-            "ms-azure-ai-promptflow-called-from": "aoai-gpt4v-tool"
-        }
+    params = {
+        "messages": messages,
+        "temperature": temperature,
+        "top_p": top_p,
+        "n": 1,
+        "stream": stream,
+        "presence_penalty": presence_penalty,
+        "frequency_penalty": frequency_penalty,
+        "extra_headers": headers,
+        "model": deployment_name,
+        "response_format": response_format,
+    }
 
-        module = _import_module(module_path)
-        if response_type not in module.__dict__:
-            raise ValueError(f"response_type {response_type} not found in {module_path}")
-        response_format = module.__dict__[response_type]
+    if stop:
+        params["stop"] = stop
+    if max_tokens is not None:
+        params["max_tokens"] = max_tokens
+    if seed is not None:
+        params["seed"] = seed
 
-        params = {
-            "messages": messages,
-            "temperature": temperature,
-            "top_p": top_p,
-            "n": 1,
-            "stream": stream,
-            "presence_penalty": presence_penalty,
-            "frequency_penalty": frequency_penalty,
-            "extra_headers": headers,
-            "model": deployment_name,
-            "response_format": response_format,
-        }
-
-        if stop:
-            params["stop"] = stop
-        if max_tokens is not None:
-            params["max_tokens"] = max_tokens
-        if seed is not None:
-            params["seed"] = seed
-
-        completion = self._client.chat.completions.create(**params)
-        return post_process_chat_api_response(completion, stream)
+    completion = client.chat.completions.create(**params)
+    return post_process_chat_api_response(completion, stream)
