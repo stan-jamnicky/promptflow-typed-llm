@@ -11,7 +11,7 @@ from promptflow.connections import AzureOpenAIConnection
 from openai import AsyncAzureOpenAI, BadRequestError
 from promptflow.contracts.types import FilePath
 from promptflow.tools.common import handle_openai_error
-from promptflow.contracts.multimedia import Image as PFImage
+
 
 MAX_CONCURRENT_REQUESTS = 4
 # Has to be hardcoded because only the new API supports structured JSON API
@@ -57,10 +57,9 @@ def typed_llm(
     response_type: str,
     temperature: float = 1,
     system_prompt: Optional[str] = None,
-    user_prompt: Optional[Union[str, list[PFImage]]] = None,
+    user_prompt: Optional[str] = None,
     assistant_prompt: Optional[str] = None,
     number_of_requests: int = 1,
-    detail: str = 'high',
     **kwargs) -> list[str]:
 
     if not system_prompt and not user_prompt and not assistant_prompt:
@@ -69,25 +68,7 @@ def typed_llm(
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     if user_prompt:
-        if isinstance(user_prompt, str):
-            messages.append({"role": "user", "content": user_prompt})
-        elif isinstance(user_prompt, list) and all(isinstance(item, PFImage) for item in user_prompt):
-            image_urls = [image.url for image in user_prompt]
-            messages.append({
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "What's in this image?"},
-                    *[
-                        {
-                        "type": "image_url", 
-                        "image_url": {"url": url, "detail": detail}
-                        }
-                        for url in image_urls
-                    ]
-                ]
-            })
-        else:
-            raise ValueError("user_prompt must be either a string or a list of PFImage instances.")
+        messages.append({"role": "user", "content": user_prompt})
     if assistant_prompt:
         messages.append({"role": "assistant", "content": assistant_prompt})
 
