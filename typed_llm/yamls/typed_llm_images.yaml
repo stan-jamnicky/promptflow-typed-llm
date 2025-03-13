@@ -1,5 +1,5 @@
 typed_llm.tools.typed_llm.typed_llm_images:
-  name: Azure OpenAI GPT-4 Turbo with Vision
+  name: Typed LLM with vision
   description: Tool for sending typed request to the LLM with Images 
   type: python
   module: typed_llm.tools.typed_llm_images
@@ -19,16 +19,6 @@ typed_llm.tools.typed_llm.typed_llm_images:
     deployment_name:
       type:
         - string
-      enabled_by: connection
-      dynamic_list:
-        func_path: promptflow.tools.aoai_gpt4v.list_deployment_names
-        func_kwargs:
-        - name: connection
-          type:
-          - AzureOpenAIConnection
-          reference: ${inputs.connection}
-      allow_manual_entry: true
-      is_multi_select: false
     temperature:
       default: 1
       type:

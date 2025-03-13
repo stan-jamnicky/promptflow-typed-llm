@@ -15,8 +15,8 @@ setup(
     },
     include_package_data=True,   # This line tells setuptools to include files from MANIFEST.in
     install_requires=[
-        'promptflow>=1.17.0',
-        'promptflow[azure]>=1.17.0',
+        'promptflow>=1.15.0',
+        'promptflow[azure]>=1.15.0',
         'promptflow-tools>=1.4.0',
     ],
     classifiers = [
