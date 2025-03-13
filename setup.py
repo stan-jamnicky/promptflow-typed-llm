@@ -10,7 +10,7 @@ setup(
     entry_points={
         "package_tools": [
             "typed_llm = typed_llm.tools.utils:list_package_tools",
-            # "typed_llm_images = typed_llm.tools.utils:list_package_tools"
+            "typed_llm_images = typed_llm.tools.utils:list_package_tools"
         ],
     },
     include_package_data=True,   # This line tells setuptools to include files from MANIFEST.in
