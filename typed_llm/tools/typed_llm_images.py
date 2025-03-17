@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Dict
 import importlib.util
 import sys
@@ -9,10 +10,13 @@ from promptflow.tools.common import handle_openai_error, \
     preprocess_template_string, find_referenced_image_set, convert_to_chat_list, init_azure_openai_client, \
     post_process_chat_api_response, list_deployment_connections, build_deployment_dict \
 
+from openai import AsyncAzureOpenAI
 from promptflow._internal import ToolProvider, tool
 from promptflow.connections import AzureOpenAIConnection
 from promptflow.contracts.types import PromptTemplate, FilePath
 
+MAX_CONCURRENT_REQUESTS = 4
+# Has to be hardcoded because only the new API supports structured JSON API
 API_VERSION = "2024-08-01-preview"
 
 def _import_module(module_path: str):
@@ -46,27 +50,45 @@ def list_deployment_names(
 
     return res
 
-@tool(streaming_option_parameter="stream")
 @handle_openai_error()
+async def _async_do_openai_request(
+    client: AsyncAzureOpenAI, 
+    semaphore: asyncio.Semaphore,
+    deployment_name: str,
+    temperature: float,
+    messages: list[dict[str, str]],
+    response_format: type):
+
+    async with semaphore:
+        completion = await client.beta.chat.completions.parse(
+            model=deployment_name,
+            response_format=response_format,
+            temperature=temperature,
+            messages=messages,
+        )
+
+        if completion.choices[0].message.refusal:
+            raise ValueError(f"Completion refused: {completion.choices[0].message.refusal}")
+        return completion.choices[0].message.content
+
+@tool
 def typed_llm_images(
-    connection: AzureOpenAIConnection,
+    connection: AsyncAzureOpenAI,
     prompt: PromptTemplate,
     response_type: str,
     module_path: FilePath,
     deployment_name: str,
     temperature: float = 1.0,
     top_p: float = 1.0,
-    # stream is a hidden to the end user, it is only supposed to be set by the executor.
-    stream: bool = False,
     stop: list = None,
     max_tokens: int = None,
     presence_penalty: float = 0,
     frequency_penalty: float = 0,
     seed: int = None,
     detail: str = 'auto',
+    number_of_requests: int = 1,
     **kwargs,
 ) -> str:
-    client = init_azure_openai_client(connection)
     prompt = preprocess_template_string(prompt)
     referenced_images = find_referenced_image_set(kwargs)
 
@@ -89,7 +111,6 @@ def typed_llm_images(
         "temperature": temperature,
         "top_p": top_p,
         "n": 1,
-        "stream": stream,
         "presence_penalty": presence_penalty,
         "frequency_penalty": frequency_penalty,
         "extra_headers": headers,
@@ -104,5 +125,20 @@ def typed_llm_images(
     if seed is not None:
         params["seed"] = seed
 
-    completion = client.chat.completions.create(**params)
-    return post_process_chat_api_response(completion, stream)
+    async def do_requests():
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+        if connection.api_key:
+            client = AsyncAzureOpenAI(api_key=connection.api_key, azure_endpoint=connection.api_base, api_version=API_VERSION)
+        else:
+            client = AsyncAzureOpenAI(azure_ad_token_provider=connection.get_token, azure_endpoint=connection.api_base, api_version=API_VERSION)
+
+        tasks = [asyncio.create_task(_async_do_openai_request(
+            client,
+            semaphore,
+            deployment_name,
+            temperature,
+            messages,
+            response_format)) for _ in range(number_of_requests)]
+        return await asyncio.gather(*tasks)
+    loop = asyncio.new_event_loop()
+    return loop.run_until_complete(do_requests())
