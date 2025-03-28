@@ -49,35 +49,24 @@ def list_deployment_names(
             res.append(cur_item)
 
     return res
-
-@handle_openai_error()
-async def _async_do_openai_request(
-    client: AsyncAzureOpenAI, 
-    semaphore: asyncio.Semaphore,
-    deployment_name: str,
-    temperature: float,
-    messages: list[dict[str, str]],
-    response_format: type):
-
-    async with semaphore:
-        completion = await client.beta.chat.completions.parse(
-            model=deployment_name,
-            response_format=response_format,
-            temperature=temperature,
-            messages=messages,
-        )
-
-        if completion.choices[0].message.refusal:
-            raise ValueError(f"Completion refused: {completion.choices[0].message.refusal}")
-        return completion.choices[0].message.content
+    
+async def stream_responses(response):
+    """Generator to yield streaming responses."""
+    for chunk in response.choices:
+        if chunk and hasattr(chunk.message, 'content') and chunk.message.content is not None:
+            print(chunk.message.content)  # Print the content of the message
+            yield chunk.message.content  # Yield the content for streaming
 
 @tool
-def typed_llm_images(
+@handle_openai_error()
+async def typed_llm_images(
     connection: AsyncAzureOpenAI,
     prompt: PromptTemplate,
     response_type: str,
     module_path: FilePath,
     deployment_name: str,
+    n: int = 1,
+    stream: bool = False,
     temperature: float = 1.0,
     top_p: float = 1.0,
     stop: list = None,
@@ -86,19 +75,22 @@ def typed_llm_images(
     frequency_penalty: float = 0,
     seed: int = None,
     detail: str = 'auto',
-    number_of_requests: int = 1,
     **kwargs,
-) -> str:
+) -> list[str]:
     prompt = preprocess_template_string(prompt)
     referenced_images = find_referenced_image_set(kwargs)
 
     # convert list type into ChatInputList type
     converted_kwargs = convert_to_chat_list(kwargs)
-    messages = build_messages(prompt=prompt, images=list(referenced_images), detail=detail, **converted_kwargs)
+    
+    if referenced_images:
+        messages = build_messages(prompt=prompt, images=list(referenced_images), detail=detail, **converted_kwargs)
+    else:
+        messages = build_messages(prompt=prompt)
 
     headers = {
         "Content-Type": "application/json",
-        "ms-azure-ai-promptflow-called-from": "aoai-gpt4v-tool"
+        "ms-azure-ai-promptflow-called-from": "typed_llm_images"
     }
 
     module = _import_module(module_path)
@@ -110,12 +102,12 @@ def typed_llm_images(
         "messages": messages,
         "temperature": temperature,
         "top_p": top_p,
-        "n": 1,
+        "n": n,
         "presence_penalty": presence_penalty,
         "frequency_penalty": frequency_penalty,
         "extra_headers": headers,
         "model": deployment_name,
-        "response_format": response_format,
+        "response_format": response_format
     }
 
     if stop:
@@ -125,20 +117,15 @@ def typed_llm_images(
     if seed is not None:
         params["seed"] = seed
 
-    async def do_requests():
-        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-        if connection.api_key:
-            client = AsyncAzureOpenAI(api_key=connection.api_key, azure_endpoint=connection.api_base, api_version=API_VERSION)
-        else:
-            client = AsyncAzureOpenAI(azure_ad_token_provider=connection.get_token, azure_endpoint=connection.api_base, api_version=API_VERSION)
+    if connection.api_key:
+        client = AsyncAzureOpenAI(api_key=connection.api_key, azure_endpoint=connection.api_base, api_version=API_VERSION)
+    else:
+        client = AsyncAzureOpenAI(azure_ad_token_provider=connection.get_token, azure_endpoint=connection.api_base, api_version=API_VERSION)
+    
+    response = await client.beta.chat.completions.parse(**params)
 
-        tasks = [asyncio.create_task(_async_do_openai_request(
-            client,
-            semaphore,
-            deployment_name,
-            temperature,
-            messages,
-            response_format)) for _ in range(number_of_requests)]
-        return await asyncio.gather(*tasks)
-    loop = asyncio.new_event_loop()
-    return loop.run_until_complete(do_requests())
+    if stream:
+        return stream_responses(response)
+    else:
+        # Return all choices' content
+        return [choice.message.content for choice in response.choices if hasattr(choice.message, 'content') and choice.message.content is not None]

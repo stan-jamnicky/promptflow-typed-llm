@@ -38,6 +38,14 @@ typed_llm.tools.typed_llm_images.typed_llm_images:
       default: 512
       type:
         - int
+    n:
+      type:
+        - int
+      default: 1
+    stream:
+      type:
+        - bool
+      default: False
     stop:
       default: ""
       type:
