@@ -34,11 +34,11 @@ typed_llm.tools.typed_llm_images.typed_llm_images:
     response_type:
       type:
         - string
-    max_tokens:
-      default: 512
+    n:
       type:
         - int
-    n:
+      default: 1
+    number_of_requests:
       type:
         - int
       default: 1
@@ -46,10 +46,6 @@ typed_llm.tools.typed_llm_images.typed_llm_images:
       type:
         - bool
       default: False
-    stop:
-      default: ""
-      type:
-        - list
     presence_penalty:
       default: 0
       type:
@@ -58,10 +54,6 @@ typed_llm.tools.typed_llm_images.typed_llm_images:
       default: 0
       type:
         - double
-    seed:
-      default: ""
-      type:
-        - int
     detail:
       enum:
       - low
