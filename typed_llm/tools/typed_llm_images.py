@@ -7,17 +7,15 @@ from promptflow.core import tool
 
 from promptflow.core._prompty_utils import build_messages
 from promptflow.tools.common import handle_openai_error, \
-    preprocess_template_string, find_referenced_image_set, convert_to_chat_list, init_azure_openai_client, \
-    post_process_chat_api_response, list_deployment_connections, build_deployment_dict \
+    preprocess_template_string, find_referenced_image_set, convert_to_chat_list, \
+    list_deployment_connections, build_deployment_dict \
 
 from openai import AsyncAzureOpenAI
-from promptflow._internal import ToolProvider, tool
-from promptflow.connections import AzureOpenAIConnection
+from promptflow._internal import tool
 from promptflow.contracts.types import PromptTemplate, FilePath
 
-MAX_CONCURRENT_REQUESTS = 4
 # Has to be hardcoded because only the new API supports structured JSON API
-API_VERSION = "2024-08-01-preview"
+API_VERSION = "2024-11-20"
 
 def _import_module(module_path: str):
     module_name = Path(module_path).stem
@@ -54,7 +52,6 @@ async def stream_responses(response):
     """Generator to yield streaming responses."""
     for chunk in response.choices:
         if chunk and hasattr(chunk.message, 'content') and chunk.message.content is not None:
-            print(chunk.message.content)  # Print the content of the message
             yield chunk.message.content  # Yield the content for streaming
 
 @tool
