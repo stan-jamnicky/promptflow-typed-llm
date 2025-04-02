@@ -140,13 +140,12 @@ def typed_llm_images(
         else:
             client = AsyncAzureOpenAI(azure_ad_token_provider=connection.get_token, azure_endpoint=connection.api_base, api_version=API_VERSION)
 
-        tasks = (_async_do_openai_request(client, semaphore, **params) for _ in range(number_of_requests))
-        results = await asyncio.gather(*tasks)
-        return [item for sublist in results for item in sublist]
+        tasks = [asyncio.create_task(_async_do_openai_request(client, semaphore, **params)) for _ in range(number_of_requests)]
+        return await asyncio.gather(*tasks)
 
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        # If the event loop is already running (e.g., in a Jupyter Notebook or other async context)
-        return asyncio.run(do_requests())
-    else:
-        return loop.run_until_complete(do_requests())
+    # Explicitly create a new event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    results = loop.run_until_complete(do_requests())
+    loop.close()
+    return [item for sublist in results for item in sublist]
