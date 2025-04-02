@@ -56,17 +56,29 @@ async def _async_do_openai_request(
     **kwargs):
 
     async with semaphore:
-        completion = await client.beta.chat.completions.parse(**kwargs)
-        contents = []
+        while True:
+            completion = await client.beta.chat.completions.parse(**kwargs)
 
-        for choice in completion.choices:
-            if choice.message.refusal:
-                raise ValueError(f"Completion refused: {choice.message.refusal}")
-            else:
-                content = getattr(choice.message, "content", None)
-                if content:
-                    contents.append(content)
-        return contents
+            if not completion.choices:
+                return []
+
+            contents = [
+                choice.message.content
+                for choice in completion.choices
+                if not choice.message.refusal and getattr(choice.message, "content", None)
+            ]
+
+            refusals = [
+                choice.message.refusal
+                for choice in completion.choices
+                if choice.message.refusal
+            ]
+
+            if refusals:
+                print(f"Completion refused: {', '.join(refusals)}. Retrying...")
+                continue  # Retry the request if there are refusals
+
+            return contents
     
 @tool
 def typed_llm_images(
@@ -102,16 +114,24 @@ def typed_llm_images(
         raise ValueError(f"response_type {response_type} not found in {module_path}")
     response_format = module.__dict__[response_type]
 
-    params = {
-        "messages": messages,
-        "temperature": temperature,
-        "top_p": top_p,
-        "n": n,
-        "presence_penalty": presence_penalty,
-        "frequency_penalty": frequency_penalty,
-        "model": deployment_name,
-        "response_format": response_format
-    }
+    if deployment_name == 'o3-mini':
+        params = {
+            "model": deployment_name,
+            "messages": messages,
+            "response_format": response_format,
+            "n": n,
+        }
+    else:
+        params = {
+            "messages": messages,
+            "temperature": temperature,
+            "top_p": top_p,
+            "n": n,
+            "presence_penalty": presence_penalty,
+            "frequency_penalty": frequency_penalty,
+            "model": deployment_name,
+            "response_format": response_format,
+        }
     
     async def do_requests():
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
@@ -120,12 +140,8 @@ def typed_llm_images(
         else:
             client = AsyncAzureOpenAI(azure_ad_token_provider=connection.get_token, azure_endpoint=connection.api_base, api_version=API_VERSION)
 
-        tasks = [asyncio.create_task(_async_do_openai_request(
-            client,
-            semaphore,
-            **params)) for _ in range(number_of_requests)]
+        tasks = (_async_do_openai_request(client, semaphore, **params) for _ in range(number_of_requests))
         results = await asyncio.gather(*tasks)
-        aggregated_results = [item for sublist in results for item in sublist]
-        return aggregated_results
-    loop = asyncio.new_event_loop()
-    return loop.run_until_complete(do_requests())
+        return [item for sublist in results for item in sublist]
+
+    return asyncio.run(do_requests())
