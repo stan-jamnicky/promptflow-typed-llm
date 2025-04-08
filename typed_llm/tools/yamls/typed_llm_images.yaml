@@ -38,10 +38,6 @@ typed_llm.tools.typed_llm_images.typed_llm_images:
       type:
         - int
       default: 1
-    number_of_requests:
-      type:
-        - int
-      default: 1
     stream:
       type:
         - bool

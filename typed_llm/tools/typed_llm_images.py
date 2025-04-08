@@ -52,34 +52,30 @@ def list_deployment_names(
 @handle_openai_error()
 async def _async_do_openai_request(
     client: AsyncAzureOpenAI, 
-    semaphore: asyncio.Semaphore,
     **kwargs):
 
-    async with semaphore:
-        while True:
-            completion = await client.beta.chat.completions.parse(**kwargs)
+        completion = await client.beta.chat.completions.parse(**kwargs)
 
-            if not completion.choices:
-                return []
+        if not completion.choices:
+            return []
 
-            contents = [
-                choice.message.content
-                for choice in completion.choices
-                if not choice.message.refusal and getattr(choice.message, "content", None)
-            ]
+        contents = [
+            choice.message.content
+            for choice in completion.choices
+            if not choice.message.refusal and getattr(choice.message, "content", None)
+        ]
 
-            refusals = [
-                choice.message.refusal
-                for choice in completion.choices
-                if choice.message.refusal
-            ]
+        refusals = [
+            choice.message.refusal
+            for choice in completion.choices
+            if choice.message.refusal
+        ]
 
-            if refusals:
-                print(f"Completion refused: {', '.join(refusals)}. Retrying...")
-                continue  # Retry the request if there are refusals
+        if refusals:
+            print(f"Completion refused: {', '.join(refusals)}")
 
-            return contents
-    
+        return contents
+
 @tool
 def typed_llm_images(
     connection: AsyncAzureOpenAI,
@@ -93,7 +89,6 @@ def typed_llm_images(
     presence_penalty: float = 0,
     frequency_penalty: float = 0,
     detail: str = 'auto',
-    number_of_requests: int = 1,
     **kwargs,
 ) -> list[str]:
     referenced_images = find_referenced_image_set(kwargs)
@@ -132,21 +127,11 @@ def typed_llm_images(
             "model": deployment_name,
             "response_format": response_format,
         }
-    
-    async def do_requests():
-        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-        if connection.api_key:
-            client = AsyncAzureOpenAI(api_key=connection.api_key, azure_endpoint=connection.api_base, api_version=API_VERSION)
-        else:
-            client = AsyncAzureOpenAI(azure_ad_token_provider=connection.get_token, azure_endpoint=connection.api_base, api_version=API_VERSION)
 
-        tasks = [asyncio.create_task(_async_do_openai_request(
-            client,
-            semaphore,
-            **params)) for _ in range(number_of_requests)]
-        results = await asyncio.gather(*tasks)
-        return [item for sublist in results for item in sublist]
+    if connection.api_key:
+        client = AsyncAzureOpenAI(api_key=connection.api_key, azure_endpoint=connection.api_base, api_version=API_VERSION)
+    else:
+        client = AsyncAzureOpenAI(azure_ad_token_provider=connection.get_token, azure_endpoint=connection.api_base, api_version=API_VERSION)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    return loop.run_until_complete(do_requests())
+    result = asyncio.run(_async_do_openai_request(client, **params))
+    return result
