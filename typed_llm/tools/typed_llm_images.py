@@ -33,8 +33,11 @@ def list_deployment_names(
     connection=""
 ) -> List[Dict[str, str]]:
     res = []
-    deployment_collection = list_deployment_connections(subscription_id, resource_group_name, workspace_name,
-                                                        connection)
+    deployment_collection = list_deployment_connections(
+        subscription_id, 
+        resource_group_name, 
+        workspace_name,
+        connection)
     if not deployment_collection:
         return res
 
@@ -133,5 +136,11 @@ def typed_llm_images(
     else:
         client = AsyncAzureOpenAI(azure_ad_token_provider=connection.get_token, azure_endpoint=connection.api_base, api_version=API_VERSION)
 
-    result = asyncio.run(_async_do_openai_request(client, **params))
-    return result
+    try:
+        loop = asyncio.get_running_loop()
+
+        future = asyncio.run_coroutine_threadsafe(_async_do_openai_request(client, **params), loop)
+        return future.result() 
+
+    except RuntimeError:
+        return asyncio.run(_async_do_openai_request(client, **params))
