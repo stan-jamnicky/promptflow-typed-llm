@@ -13,7 +13,6 @@ from promptflow.tools.common import handle_openai_error, \
 from openai import AsyncAzureOpenAI
 from promptflow._internal import tool
 from promptflow.contracts.types import PromptTemplate, FilePath
-from promptflow.tracing import start_trace
 
 # Has to be hardcoded because only the new API supports structured JSON API
 API_VERSION = "2025-01-01-preview"
@@ -57,7 +56,7 @@ def list_deployment_names(
 async def _async_do_openai_request(
     client: AsyncAzureOpenAI, 
     **kwargs):
-    try:
+
         completion = await client.beta.chat.completions.parse(**kwargs)
 
         if not completion.choices:
@@ -79,24 +78,6 @@ async def _async_do_openai_request(
             print(f"Completion refused: {', '.join(refusals)}")
 
         return contents
-    finally:
-        # Ensure client cleanup happens
-        try:
-            await client.close()
-        except Exception as e:
-            print(f"Warning: Error during client cleanup: {str(e)}")
-
-def _create_event_loop():
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        return loop
 
 @tool
 def typed_llm_images(
@@ -150,47 +131,17 @@ def typed_llm_images(
             "response_format": response_format,
         }
 
-    start_trace()
-
     if connection.api_key:
-        client = AsyncAzureOpenAI(
-            api_key=connection.api_key, 
-            azure_endpoint=connection.api_base, 
-            api_version=API_VERSION,
-            timeout=60.0  # Add explicit timeout
-        )
+        client = AsyncAzureOpenAI(api_key=connection.api_key, azure_endpoint=connection.api_base, api_version=API_VERSION)
     else:
-        client = AsyncAzureOpenAI(
-            azure_ad_token_provider=connection.get_token, 
-            azure_endpoint=connection.api_base, 
-            api_version=API_VERSION,
-            timeout=60.0  # Add explicit timeout
-        )
-
-    async def _execute():
-        try:
-            return await _async_do_openai_request(client, **params)
-        except Exception as e:
-            print(f"Error during request execution: {str(e)}")
-            raise
+        client = AsyncAzureOpenAI(azure_ad_token_provider=connection.get_token, azure_endpoint=connection.api_base, api_version=API_VERSION)
 
     try:
-        # Try to get or create event loop in thread-safe manner
-        loop = _create_event_loop()
-        
-        # Run the async operation
-        if loop.is_running():
-            # If we're already in an event loop, create a task
-            future = asyncio.run_coroutine_threadsafe(_execute(), loop)
-            return future.result(timeout=60)
-        else:
-            # If no loop is running, run until complete
-            return loop.run_until_complete(_execute())
-    except Exception as e:
-        print(f"Error in async execution: {str(e)}")
-        # Last resort fallback
-        try:
-            return asyncio.run(_execute())
-        except Exception as fallback_e:
-            print(f"Fatal error in async execution: {str(fallback_e)}")
-            raise
+        # When running in FastAPI, there should already be an event loop
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(_async_do_openai_request(client, **params))
+    except RuntimeError as e:
+        # Log the error for debugging
+        print(f"Event loop error: {str(e)}")
+        # Use asyncio.run as last resort
+        return asyncio.run(_async_do_openai_request(client, **params))
