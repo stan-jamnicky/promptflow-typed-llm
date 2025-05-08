@@ -137,10 +137,11 @@ def typed_llm_images(
         client = AsyncAzureOpenAI(azure_ad_token_provider=connection.get_token, azure_endpoint=connection.api_base, api_version=API_VERSION)
 
     try:
-        loop = asyncio.get_running_loop()
-
-        future = asyncio.run_coroutine_threadsafe(_async_do_openai_request(client, **params), loop)
-        return future.result() 
-
-    except RuntimeError:
+        # When running in FastAPI, there should already be an event loop
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(_async_do_openai_request(client, **params))
+    except RuntimeError as e:
+        # Log the error for debugging
+        print(f"Event loop error: {str(e)}")
+        # Use asyncio.run as last resort
         return asyncio.run(_async_do_openai_request(client, **params))
